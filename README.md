@@ -1,4 +1,5 @@
 # Employee Tracker           [![License:](https://img.shields.io/badge/License:-MIT-red)](http://choosealicense.com/licenses/mit/)
+Walkthrough video link: https://streamable.com/ib9azq
 ## Table of Contents
 - [Description](#description)
 - [Installation](#installation-instructions)
