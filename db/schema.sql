@@ -33,7 +33,3 @@ CREATE TABLE employee(
     ON DELETE SET NULL
 );
 
-SELECT e.first_name || ' ' || e.last_name AS employee,  d.name AS department
-FROM employee e
-JOIN role r ON e.role_id = r.id
-JOIN department d ON r.department = d.id WHERE d.id = 1;
