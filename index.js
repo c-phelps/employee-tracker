@@ -1,6 +1,6 @@
 const inquirer = require("inquirer");
 // retrieve our ugly constants from our constants file
-const { welcome, arrChoices, arrPrompts, arrRoleChoices } = require("./constants.js");
+const { welcome, arrChoices, arrPrompts } = require("./constants.js");
 // initialize pg
 const { Pool } = require("pg");
 // set a new instance of the pool with the db credentials
@@ -10,12 +10,14 @@ const pool = new Pool({
   host: "localhost",
   database: "employees_db",
 });
-// establish a connection
-pool.connect();
+let client;
 // first code ran by our app
-function init() {
+async function init() {
   // cool welcome image
   console.log(welcome);
+  // establish a connection
+  // after some reading you can retrieve the client from the pool and assign it to a variable so that the client can be released
+  client = await pool.connect();
   // call to the next function
   runInquirer();
 }
@@ -25,37 +27,51 @@ async function runInquirer() {
   const seclectedIndex = arrChoices.indexOf(res.inWait);
   const query = await handleInput(seclectedIndex);
   // if the user selected quit this should fire and exit the recursive function call
-  if (!query) {
-    return;
+  if (query === false) {
+    console.log("Exiting.");
+    // release the client and close the pool
+    closeConnections();
+    process.exit();
+  } else {
+    runInquirer();
   }
   // otherwise recursion
-  runInquirer();
 }
+//
+async function closeConnections() {
+  if (client) {
+    // release client
+    client.release();
+  }
+  // close the pool connection
+  await pool.end();
+}
+
 // switch function to determine which of the following functions to use based on user input
 async function handleInput(index) {
   switch (index) {
     case 0:
-      selectEmployees();
-      break;
+      await selectEmployees();
+      return true;
     case 1:
-      insertEmployee();
-      break;
+      await insertEmployee();
+      return true;
     case 2:
-      updateEmployee();
-      break;
+      await updateEmployee();
+      return true;
     case 3:
-      selectRoles();
-      break;
+      await selectRoles();
+      return true;
     case 4:
-      insertRole();
-      break;
+      await insertRole();
+      return true;
     case 5:
-      selectDepartment();
-      break;
+      await selectDepartment();
+      return true;
     case 6:
-      insertDepartment();
-      break;
-    default:
+      await insertDepartment();
+      return true;
+    case 7:
       return false;
   }
 }
@@ -66,70 +82,106 @@ async function selectEmployees() {
                   LEFT JOIN role r ON e.role_id = r.id
                   LEFT JOIN department d ON r.department = d.id
                   LEFT JOIN employee m ON e.manager_id = m.id;`;
-
-  strData = await pool.query(strQuery);
-  console.table(strData);
+  const { rows } = await client.query(strQuery);
+  console.log("\n");
+  console.table(rows);
 }
 // handle our employee insert
 async function insertEmployee() {
   strQuery = await addEmployee();
-  await pool.query(strQuery);
+  await client.query(strQuery);
   console.log("Employee added successfully!");
 }
 // handle role update for employee
 async function updateEmployee() {
   strQuery = await promptEmployeeUpdate();
-  await pool.query(strQuery);
+  await client.query(strQuery);
   console.log("Employee role updated successfully!");
 }
 // handle selection of roles
 async function selectRoles() {
   strQuery = `SELECT r.id AS id, title, d.name, salary FROM role r JOIN department d ON r.department = d.id;`;
-  strData = await pool.query(strQuery);
-  console.table(strData);
+  const { rows } = await client.query(strQuery);
+  console.log("\n");
+  console.table(rows);
 }
 // handle adding a new role
 async function insertRole() {
   strQuery = await addRole();
-  await pool.query(strQuery);
+  await client.query(strQuery);
   console.log("Role added successfully!");
 }
 // handle selection of all departments
 async function selectDepartment() {
   strQuery = `SELECT * FROM department;`;
-  strData = await pool.query(strQuery);
-  console.table(strData);
+  const { rows } = await client.query(strQuery);
+  console.log("\n");
+  console.table(rows);
 }
 // handle adding a new department
 async function insertDepartment() {
   strQuery = await addDepartment();
-  await pool.query(strQuery);
+  await client.query(strQuery);
   console.log("Department added successfully!");
 }
+//
+const departments = async () => {
+  const data = await pool.query(`SELECT name FROM department;`);
+  // conver the array of objects into arrays of strings..
+  const arrDept = data.rows.map((dept) => dept.name);
+  return arrDept;
+};
 // asyncronous function to prompt the user again within the original inquirer prompt
-async function addRole() {
-  const res = await inquirer.prompt(arrRoleChoices);
+async function addRole(inCheck, inRole, inDept) {
+  const arrDeptData = await departments();
+  const arrRoleChoices = [
+    { type: "input", message: "What is the name of the role?", name: "inRole" },
+    { type: "number", message: "What is the salary of the role?", name: "inSalary" },
+
+    {
+      type: "list",
+      message: "Which deparmtent does the role belong to?",
+      name: "inDepartment",
+      choices: arrDeptData,
+    },
+  ];
+  // declaring res outside of the check to see if a valid salary was given
+  let res;
+  // if its first run then prompt all questions
+  if (!inCheck) {
+    res = await inquirer.prompt(arrRoleChoices);
+    inRole = res.inRole;
+    inDept = res.inDepartment;
+  } else {
+    // if it has failed the NaN check below and is being re-run, prompt only for salary
+    res = await inquirer.prompt(arrRoleChoices[1]);
+  }
+  // check to see if salary is a number, if it is not then recall the function 
+  // and pass true to inCheck and the values for role and department
+  if (isNaN(res.inSalary)) {
+    console.log("Invalid salary, please try again.");
+    return addRole(true, inRole, inDept);
+  }
   // return our SQL query
-  return `INSERT INTO role(title, salary, deparment) VALUES ('${res.inRole}', ${res.inSalary}, '${res.inDepartment}');`;
+  const dept = await pool.query(`SELECT id FROM department WHERE name = $1`, [inDept]);
+  return `INSERT INTO role(title, salary, department) VALUES ('${inRole}', ${res.inSalary}, ${dept.rows[0].id});`;
 }
 // query to dynamically fill and return the roles
 const roles = async () => {
   const data = await pool.query(`SELECT title FROM role;`);
-  return data.rows;
+  const arrRoles = data.rows.map((role) => role.title);
+  return arrRoles;
 };
 // query to concatenate and return the firstnames and lastnames from the employee table
 const employees = async () => {
   const data = await pool.query(`SELECT first_name || ' ' || last_name AS name FROM employee;`);
-  return data.rows;
+  const arrEmp = data.rows.map((employee) => employee.name);
+  return arrEmp;
 };
-// function to handle prompting for adding new employee
+// query builder function to handle prompting for adding new employee
 async function addEmployee() {
-  // recieve the array of objects from our query ...
-  const objRoles = await roles();
-  const objManager = await employees();
-  // conver the array of objects into arrays of strings..
-  const arrRoles = objRoles.map((role) => role.title);
-  const arrManager = objManager.map((employee) => employee.name);
+  const arrRoles = await roles();
+  const arrManager = await employees();
 
   const arrPrompt = [
     { type: "input", message: "What is the first name of the employee?", name: "inFirst" },
@@ -153,9 +205,10 @@ async function addEmployee() {
   const arrName = res.inManager.split(" ");
   const empID = await pool.query(`SELECT id FROM employee WHERE first_name = $1 AND last_name = $2;`, arrName); // pass the split array as an argument to the query
   // return our insert statement to the calling function
-  return `INSERT INTO employee(first_name,'last_name',role_id,manager_id) VALUES ('${res.inFirst}','${res.inLast}',${res.inRole},${empID.rows[0].id})`;
+  const roleID = await pool.query(`SELECT id FROM role WHERE title = $1`, [res.inRole]);
+  return `INSERT INTO employee(first_name, last_name, role_id, manager_id) VALUES ('${res.inFirst}','${res.inLast}',${roleID.rows[0].id},${empID.rows[0].id})`;
 }
-// function for adding a new department
+// query builder function for adding a new department
 async function addDepartment() {
   const res = await inquirer.prompt({
     type: "input",
@@ -163,16 +216,12 @@ async function addDepartment() {
     name: "inDepartment",
   });
   // return our SQL query
-  return `INSERT INTO department( deparment) VALUES ('${res.inDepartment}');`;
+  return `INSERT INTO department(name) VALUES ('${res.inDepartment}');`;
 }
 // function for updating the role of a current employee
 async function promptEmployeeUpdate() {
-  // copy pasted from employee function above, variables renamed to match current functionality
-  const objEmp = await employees();
-  const objRoles = await roles();
-  // turn our array of objects into an array of strings for both objects
-  const arrRoles = objRoles.map((role) => role.title);
-  const arrEmp = objEmp.map((employee) => employee.name);
+  const arrEmp = await employees();
+  const arrRoles = await roles();
   // dynamic array of objects for inquirer
   const arrPrompt = [
     {
@@ -192,7 +241,9 @@ async function promptEmployeeUpdate() {
   const res = await inquirer.prompt(arrPrompt);
   // split the name and use if in the where statement for updating
   const arrName = res.inName.split(" ");
-  return `UPDATE employee SET role = ${res.inRole} WHERE first_name = ${arrName[0]} AND last_name = ${arrName[1]};`;
+  const roleArray = [res.inRole];
+  const roleID = await pool.query(`SELECT id FROM role WHERE title = $1`, roleArray);
+  return `UPDATE employee SET role_id = ${roleID.rows[0].id} WHERE first_name = '${arrName[0]}' AND last_name = '${arrName[1]}';`;
 }
 
 // run our code

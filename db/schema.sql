@@ -3,9 +3,7 @@ CREATE DATABASE employees_db;
 
 \c employees_db;
 
-ALTER TABLE role DROP CONSTRAINT IF EXISTS role_department_fkey;
-ALTER TABLE employee DROP CONSTRAINT IF EXISTS employee_role_id_fkey;
-
+-- drop the table if it exists and cascade to related
 DROP TABLE IF EXISTS employee CASCADE;
 DROP TABLE IF EXISTS role CASCADE;
 DROP TABLE IF EXISTS department CASCADE;

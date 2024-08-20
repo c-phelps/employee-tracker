@@ -18,7 +18,7 @@ const arrChoices = [
   "View All Employees",
   "Add Employee",
   "Update Employee Role",
-  "View all Roles",
+  "View All Roles",
   "Add Role",
   "View All Departments",
   "Add Department",
@@ -34,10 +34,4 @@ const arrPrompts = [
   },
 ];
 
-const arrRoleChoices = [
-  { type: "input", message: "What is the name of the role?", name: "inRole" },
-  { type: "input", message: "What is the salary of the role?", name: "inSalary" },
-  { type: "input", message: "Which deparmtent does the role belong to?", name: "inDepartment" },
-];
-
-module.exports = { welcome, arrChoices, arrPrompts, arrRoleChoices };
+module.exports = { welcome, arrChoices, arrPrompts };
