@@ -77,7 +77,7 @@ async function handleInput(index) {
 }
 // handle displaying our employees
 async function selectEmployees() {
-  strQuery = `SELECT e.id as id, e.first_name as first_name, e.last_name AS last_name, title, department, salary, m.first_name AS manager
+  strQuery = `SELECT e.id as id, e.first_name as first_name, e.last_name AS last_name, title, d.name as department, salary, m.first_name AS manager
                   FROM employee e
                   LEFT JOIN role r ON e.role_id = r.id
                   LEFT JOIN department d ON r.department = d.id
@@ -156,7 +156,7 @@ async function addRole(inCheck, inRole, inDept) {
     // if it has failed the NaN check below and is being re-run, prompt only for salary
     res = await inquirer.prompt(arrRoleChoices[1]);
   }
-  // check to see if salary is a number, if it is not then recall the function 
+  // check to see if salary is a number, if it is not then recall the function
   // and pass true to inCheck and the values for role and department
   if (isNaN(res.inSalary)) {
     console.log("Invalid salary, please try again.");

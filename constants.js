@@ -21,7 +21,7 @@ const arrChoices = [
   "View All Roles",
   "Add Role",
   "View All Departments",
-  "Add Department",
+  "Add Departments",
   "Quit",
 ];
 
