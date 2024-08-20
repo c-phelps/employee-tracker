@@ -72,12 +72,21 @@ async function handleInput(index) {
       await insertDepartment();
       return true;
     case 7:
+      await selectEmployeesByManager();
+      return true;
+    case 8:
+      await selectEmployeesByDepartment();
+      return true;
+    case 9:
+      await selectBudget();
+      return true;
+    case 10:
       return false;
   }
 }
 // handle displaying our employees
 async function selectEmployees() {
-  strQuery = `SELECT e.id as id, e.first_name as first_name, e.last_name AS last_name, title, d.name as department, salary, m.first_name AS manager
+  const strQuery = `SELECT e.id as id, e.first_name as first_name, e.last_name AS last_name, title, d.name as department, salary, m.first_name || ' ' || m.last_name AS manager
                   FROM employee e
                   LEFT JOIN role r ON e.role_id = r.id
                   LEFT JOIN department d ON r.department = d.id
@@ -88,43 +97,102 @@ async function selectEmployees() {
 }
 // handle our employee insert
 async function insertEmployee() {
-  strQuery = await addEmployee();
+  const strQuery = await addEmployee();
   await client.query(strQuery);
   console.log("Employee added successfully!");
 }
 // handle role update for employee
 async function updateEmployee() {
-  strQuery = await promptEmployeeUpdate();
+  const strQuery = await promptEmployeeUpdate();
   await client.query(strQuery);
   console.log("Employee role updated successfully!");
 }
 // handle selection of roles
 async function selectRoles() {
-  strQuery = `SELECT r.id AS id, title, d.name, salary FROM role r JOIN department d ON r.department = d.id;`;
+  const strQuery = `SELECT r.id AS id, title, d.name, salary FROM role r JOIN department d ON r.department = d.id;`;
   const { rows } = await client.query(strQuery);
   console.log("\n");
   console.table(rows);
 }
 // handle adding a new role
 async function insertRole() {
-  strQuery = await addRole();
+  const strQuery = await addRole();
   await client.query(strQuery);
   console.log("Role added successfully!");
 }
 // handle selection of all departments
 async function selectDepartment() {
-  strQuery = `SELECT * FROM department;`;
+  const strQuery = `SELECT * FROM department;`;
   const { rows } = await client.query(strQuery);
   console.log("\n");
   console.table(rows);
 }
 // handle adding a new department
 async function insertDepartment() {
-  strQuery = await addDepartment();
+  const strQuery = await addDepartment();
   await client.query(strQuery);
   console.log("Department added successfully!");
 }
-//
+// function to select employees by manager
+async function selectEmployeesByManager() {
+  // first select all managers, disntinctly only displaying the name once
+  const strQuery = `SELECT DISTINCT m.first_name || ' ' || m.last_name as manager
+            FROM employee e
+            JOIN employee m ON e.manager_id = m.id;`;
+  const data = await pool.query(strQuery);
+  // map the data from an array of objects into an array of names
+  const arrManagers = data.rows.map((names) => names.manager);
+  // prompt the user based on the names
+  const res = await inquirer.prompt({
+    type: "list",
+    message: "Select a manager:",
+    name: "inManager",
+    choices: arrManagers,
+  });
+  // send  the name chose to an array of first name last name
+  const arrName = res.inManager.split(" ");
+  console.log(arrName);
+  // query the db where first name = index 0 and last index 1
+  const { rows } = await pool.query(
+    `SELECT DISTINCT e.first_name || ' ' || e.last_name as employee, m.first_name || ' ' || m.last_name as manager
+    FROM employee m
+    JOIN employee e ON e.manager_id = m.id WHERE m.first_name = $1 AND m.last_name = $2;`,
+    arrName
+  );
+  // log the resulting table
+  console.log("\n");
+  console.table(rows);
+}
+// select budget
+async function selectBudget() {
+  const strQuery = `SELECT  d.name AS department, SUM(salary) as salary_sum 
+  FROM role r 
+  JOIN department d ON r.department = d.id 
+  JOIN employee e ON e.role_id = r.id
+  GROUP BY (d.name);`;
+  const { rows } = await client.query(strQuery);
+  console.log("\n");
+  console.table(rows);
+}
+
+async function selectEmployeesByDepartment() {
+  const arrDeptData = await departments();
+  const res = await inquirer.prompt({
+    type: "list",
+    message: "Select a department:",
+    name: "inDept",
+    choices: arrDeptData,
+  });
+  const strQuery = `SELECT e.first_name || ' ' || e.last_name AS employee,  d.name AS department
+          FROM employee e
+          JOIN role r ON e.role_id = r.id
+          JOIN department d ON r.department = d.id WHERE d.name = '${res.inDept}';`;
+  const { rows } = await client.query(strQuery);
+  console.log("\n");
+  console.table(rows);
+}
+
+//simple function to return an array of departments
 const departments = async () => {
   const data = await pool.query(`SELECT name FROM department;`);
   // conver the array of objects into arrays of strings..
@@ -181,7 +249,8 @@ const employees = async () => {
 // query builder function to handle prompting for adding new employee
 async function addEmployee() {
   const arrRoles = await roles();
-  const arrManager = await employees();
+  let arrManager = await employees();
+  arrManager.unshift("None"); // add the option for the user to have a null manager
 
   const arrPrompt = [
     { type: "input", message: "What is the first name of the employee?", name: "inFirst" },
@@ -201,12 +270,20 @@ async function addEmployee() {
   ];
   // prompt the user based on our dynamic prompt array
   const res = await inquirer.prompt(arrPrompt);
-  // retrieve the manager name into a split array
-  const arrName = res.inManager.split(" ");
-  const empID = await pool.query(`SELECT id FROM employee WHERE first_name = $1 AND last_name = $2;`, arrName); // pass the split array as an argument to the query
+  // placeholder for empID results or null
+  let managerID;
+  // updated function to allow for null manager
+  if (res.inManager !== "None") {
+    // retrieve the manager name into a split array
+    const arrName = res.inManager.split(" ");
+    const empID = await pool.query(`SELECT id FROM employee WHERE first_name = $1 AND last_name = $2;`, arrName); // pass the split array as an argument to the query
+    managerID = empID.rows[0].id;
+  } else {
+    managerID = null;
+  }
   // return our insert statement to the calling function
   const roleID = await pool.query(`SELECT id FROM role WHERE title = $1`, [res.inRole]);
-  return `INSERT INTO employee(first_name, last_name, role_id, manager_id) VALUES ('${res.inFirst}','${res.inLast}',${roleID.rows[0].id},${empID.rows[0].id})`;
+  return `INSERT INTO employee(first_name, last_name, role_id, manager_id) VALUES ('${res.inFirst}','${res.inLast}',${roleID.rows[0].id},${managerID})`;
 }
 // query builder function for adding a new department
 async function addDepartment() {
@@ -236,6 +313,12 @@ async function promptEmployeeUpdate() {
       name: "inRole",
       choices: arrRoles,
     },
+    {
+      type: "list",
+      message: "Update the employee's manager?",
+      name: "inYesNo",
+      choices: ["Yes", "No"],
+    },
   ];
   // run inquirer
   const res = await inquirer.prompt(arrPrompt);
@@ -243,7 +326,39 @@ async function promptEmployeeUpdate() {
   const arrName = res.inName.split(" ");
   const roleArray = [res.inRole];
   const roleID = await pool.query(`SELECT id FROM role WHERE title = $1`, roleArray);
-  return `UPDATE employee SET role_id = ${roleID.rows[0].id} WHERE first_name = '${arrName[0]}' AND last_name = '${arrName[1]}';`;
+  // if they do not want to update manager, dont update, otherwise run functionality from addEmployee() to select the manager
+  if (res.inYesNo === "No") {
+    return `UPDATE employee SET role_id = ${roleID.rows[0].id} WHERE first_name = '${arrName[0]}' AND last_name = '${arrName[1]}';`;
+  } else {
+    // copied code from above addEmployee()function
+    let arrManager = await employees();
+    arrManager.unshift("None");
+    const res = await inquirer.prompt({
+      type: "list",
+      message: "Who is the employee's manager?",
+      name: "inManager",
+      choices: arrManager,
+    });
+    let managerID;
+    // allow for null manager
+    if (res.inManager !== "None") {
+      // retrieve the manager name into a split array
+      const arrManagerName = res.inManager.split(" ");
+      const empID = await pool.query(
+        `SELECT id FROM employee WHERE first_name = $1 AND last_name = $2;`,
+        arrManagerName
+      ); // pass the split array as an argument to the query
+      managerID = empID.rows[0].id;
+    } else {
+      managerID = null;
+    }
+    console.log(managerID);
+    console.log(arrName);
+    console.log(
+      `UPDATE employee SET role_id = ${roleID.rows[0].id}, manager_id = ${managerID} WHERE first_name = '${arrName[0]}' AND last_name = '${arrName[1]}';`
+    );
+    return `UPDATE employee SET role_id = ${roleID.rows[0].id}, manager_id = ${managerID} WHERE first_name = '${arrName[0]}' AND last_name = '${arrName[1]}';`;
+  }
 }
 
 // run our code

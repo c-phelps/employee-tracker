@@ -17,11 +17,14 @@ const welcome = `
 const arrChoices = [
   "View All Employees",
   "Add Employee",
-  "Update Employee Role",
+  "Update Employee",
   "View All Roles",
   "Add Role",
   "View All Departments",
   "Add Departments",
+  "View employees by manager",
+  "View employees by department",
+  "View total utilized budget by department",
   "Quit",
 ];
 
