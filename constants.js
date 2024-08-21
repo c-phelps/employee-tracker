@@ -25,6 +25,9 @@ const arrChoices = [
   "View employees by manager",
   "View employees by department",
   "View total utilized budget by department",
+  "Remove employee",
+  "Remove role",
+  "Remove department",
   "Quit",
 ];
 

@@ -25,7 +25,7 @@ async function init() {
 async function runInquirer() {
   const res = await inquirer.prompt(arrPrompts);
   const seclectedIndex = arrChoices.indexOf(res.inWait);
-  const query = await handleInput(seclectedIndex);
+  const query = await switchHandler(seclectedIndex);
   // if the user selected quit this should fire and exit the recursive function call
   if (query === false) {
     console.log("Exiting.");
@@ -48,7 +48,7 @@ async function closeConnections() {
 }
 
 // switch function to determine which of the following functions to use based on user input
-async function handleInput(index) {
+async function switchHandler(index) {
   switch (index) {
     case 0:
       await selectEmployees();
@@ -81,6 +81,16 @@ async function handleInput(index) {
       await selectBudget();
       return true;
     case 10:
+      await deleteEmployee();
+      return true;
+    case 11:
+      await deleteRole();
+      return true;
+    case 12:
+      await deleteDepartment();
+      return true;
+    // quit was selected
+    case 13:
       return false;
   }
 }
@@ -133,6 +143,25 @@ async function insertDepartment() {
   await client.query(strQuery);
   console.log("Department added successfully!");
 }
+// handle employee deletion
+async function deleteEmployee() {
+  const strQuery = await removeEmplyee();
+  await client.query(strQuery);
+  console.log("Employee removed successfully!");
+}
+//  handle role deletion
+async function deleteRole() {
+  const strQuery = await removeRole();
+  await client.query(strQuery);
+  console.log("Role removed successfully!");
+}
+// handle department deletion
+async function deleteDepartment() {
+  const strQuery = await removeDepartment();
+  await client.query(strQuery);
+  console.log("Department removed successfully!");
+}
+
 // function to select employees by manager
 async function selectEmployeesByManager() {
   // first select all managers, disntinctly only displaying the name once
@@ -175,6 +204,7 @@ async function selectBudget() {
   console.table(rows);
 }
 
+// select employees by department
 async function selectEmployeesByDepartment() {
   const arrDeptData = await departments();
   const res = await inquirer.prompt({
@@ -283,7 +313,8 @@ async function addEmployee() {
   }
   // return our insert statement to the calling function
   const roleID = await pool.query(`SELECT id FROM role WHERE title = $1`, [res.inRole]);
-  return `INSERT INTO employee(first_name, last_name, role_id, manager_id) VALUES ('${res.inFirst}','${res.inLast}',${roleID.rows[0].id},${managerID})`;
+  return `INSERT INTO employee(first_name, last_name, role_id, manager_id) 
+          VALUES ('${res.inFirst}','${res.inLast}',${roleID.rows[0].id},${managerID})`;
 }
 // query builder function for adding a new department
 async function addDepartment() {
@@ -294,6 +325,39 @@ async function addDepartment() {
   });
   // return our SQL query
   return `INSERT INTO department(name) VALUES ('${res.inDepartment}');`;
+}
+// return sql string for employee deletion
+async function removeEmplyee() {
+  const arrEmp = await employees();
+  const res = await inquirer.prompt({
+    type: "list",
+    message: "Select an employee to remove:",
+    name: "inName",
+    choices: arrEmp,
+  });
+  return `DELETE FROM employee WHERE first_name || ' ' || last_name = '${res.inName}';`;
+}
+// retrun sql string to delete roles
+async function removeRole() {
+  const arrRole = await roles();
+  const res = await inquirer.prompt({
+    type: "list",
+    message: "Select a role to remove:",
+    name: "inRole",
+    choices: arrRole,
+  });
+  return `DELETE FROM role WHERE title = '${res.inRole}';`;
+}
+// return sql string to delete department
+async function removeDepartment() {
+  const arrDept = await departments();
+  const res = await inquirer.prompt({
+    type: "list",
+    message: "Select a department to delete:",
+    name: "inDept",
+    choices: arrDept,
+  });
+  return `DELETE FROM department WHERE name = '${res.inDept}'`;
 }
 // function for updating the role of a current employee
 async function promptEmployeeUpdate() {
