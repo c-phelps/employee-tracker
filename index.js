@@ -416,11 +416,6 @@ async function promptEmployeeUpdate() {
     } else {
       managerID = null;
     }
-    console.log(managerID);
-    console.log(arrName);
-    console.log(
-      `UPDATE employee SET role_id = ${roleID.rows[0].id}, manager_id = ${managerID} WHERE first_name = '${arrName[0]}' AND last_name = '${arrName[1]}';`
-    );
     return `UPDATE employee SET role_id = ${roleID.rows[0].id}, manager_id = ${managerID} WHERE first_name = '${arrName[0]}' AND last_name = '${arrName[1]}';`;
   }
 }
